@@ -1,46 +1,107 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
+	"sync"
 
-	"golang.org/x/text/message"
+	"github.com/MohOdejimi/TCPChat/internal/hub"
 )
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-
-	if err != nil {
-		panic(err)
-	}
-
-	msg := string(buf[:n])
-	p := message.NewPrinter(message.MatchLanguage("en"))
-	p.Printf("Received message: %s\n", msg)
-
+type Server struct {
+	wg sync.WaitGroup;
+	connMutex sync.Mutex;
+	connectionCount int
 }
 
-func TCPServer(port, maxConnections int) {
+var serverInstance = &Server{}
+
+var Registry = hub.NewRegistry()
+
+func handleConnection(conn net.Conn, hubInstance *hub.Hub) {
+	defer conn.Close()
+	defer serverInstance.wg.Done()
+
+	serverInstance.connMutex.Lock()
+	serverInstance.connectionCount++
+	serverInstance.connMutex.Unlock()
+
+	defer func() {
+		serverInstance.connMutex.Lock()
+		serverInstance.connectionCount--
+		serverInstance.connMutex.Unlock()
+	}()
+
+	conn.Write([]byte("Welcome to the TCP Chat Server!\n"))
+	conn.Write([]byte("Please Enter Your Username: "))
+
+	reader := bufio.NewReader(conn)
+	var username string
+	for {
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading username: %v\n", err)
+			return
+		}
+
+		username = strings.TrimSpace(input)
+		if username == "" {
+			conn.Write([]byte("Username cannot be empty. Please enter a username: "))
+			continue
+		}
+
+		_, exists  := Registry.GetUserName(username)
+		if !exists {
+			client := Registry.SetUserName(username, conn)
+			hubInstance.Register <- client.Username
+			conn.Write([]byte(fmt.Sprintf("Hello, %s! You can start chatting now.\n", username)))
+
+		done := make(chan struct{})
+
+		go client.Read(hubInstance.Broadcast, hubInstance.Deregister, done)
+
+			<-done
+		}
+
+		if exists {
+			conn.Write([]byte("Username already taken. Please choose a different username: "))
+			continue
+		}
+
+		break 
+	}	
+	
+}
+
+func TCPServer(port, maxConnections int, hubInstance *hub.Hub) error{
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
-		panic(err)
+		fmt.Printf("Error from TCP Listener: %v\n", err)
+		return err
 	}
 	defer listener.Close()
 
-	currentConnections := 0
 
-	for range maxConnections {
+	for {
 		conn, err := listener.Accept()
-		currentConnections++
-		fmt.Printf("New connection accepted. Current connections: %d\n", currentConnections)
 		if err != nil {
-			defer conn.Close()
-			panic(err)
+			fmt.Printf("Accept error: %v\n", err)
+			return err
 		}
-		go handleConnection(conn)
+
+		serverInstance.connMutex.Lock()
+		if serverInstance.connectionCount >= maxConnections {
+			fmt.Println("Max connections reached, rejecting.")
+			conn.Close()
+			serverInstance.connMutex.Unlock()
+			continue
+		}
+		serverInstance.connMutex.Unlock()
+
+		serverInstance.wg.Add(1)
+		go handleConnection(conn, hubInstance)
 	}
 }
