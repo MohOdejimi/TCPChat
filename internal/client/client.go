@@ -3,9 +3,10 @@ package client
 import (
 	"bufio"
 	"net"
+	"strings"
+	"time"
 
-	//"strings"
-
+	"github.com/MohOdejimi/TCPChat/internal/commands"
 	"github.com/MohOdejimi/TCPChat/internal/models"
 	"github.com/google/uuid"
 )
@@ -28,18 +29,58 @@ func NewClient(conn net.Conn, username string) *Client {
 }
 
 
-func (c *Client) Read(broadcast chan models.Message, deregister chan string, done chan struct{}) {
+func (c *Client) Read(broadcast chan models.Message, deregister, list chan string, dm chan models.DMMessage, done chan struct{}) {
 	defer c.Conn.Close()
 	defer close(done)
+	defer close(c.Send)
 
 	scanner := bufio.NewScanner(c.Conn)
 	for scanner.Scan() {
 		message := scanner.Text()
-		broadcast <- models.Message{
+
+		if strings.HasPrefix(message, "/"){
+			if cmd, valid := commands.Parse(message); valid {
+				switch cmd.Type {
+
+				case commands.Quit:
+					c.Conn.Write([]byte("Goodbye " + c.Username + "!\n"))
+					deregister <- c.Username
+					return
+
+				case commands.List:
+					list <- c.Username
+
+				case commands.DM:
+					dm <- models.DMMessage{
+						Sender:   c.Username,
+						Receiver: cmd.Target,
+						Message:  cmd.Body,
+						Time:     time.Now(),
+					}
+				}
+
+			} else {
+				c.Send <- []byte("Invalid command. Please try again with any of the accepted commands. /list, /quit, /rename, /dm <username> <message>\n")
+			}
+		} else {
+			broadcast <- models.Message{
 			Sender:  c.Username,
 			Message: message,
+			Time: time.Now(),
+		  }
 		}
 	}
+	
 	deregister <- c.Username
+}
+
+
+func (c *Client) Write() {
+	for msg := range c.Send {
+		_, err := c.Conn.Write(msg)
+		if err != nil {
+			return 
+		}
+	}
 }
 

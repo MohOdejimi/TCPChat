@@ -55,15 +55,22 @@ func handleConnection(conn net.Conn, hubInstance *hub.Hub) {
 
 		_, exists  := Registry.GetUserName(username)
 		if !exists {
+			usernameSlice := strings.Split(username, " ")
+			if len(usernameSlice) > 1 {
+				conn.Write([]byte("Username cannot contain spaces. Please enter a different username: "))
+				continue
+			}
 			client := Registry.SetUserName(username, conn)
 			hubInstance.Register <- client.Username
 			conn.Write([]byte(fmt.Sprintf("Hello, %s! You can start chatting now.\n", username)))
 
 		done := make(chan struct{})
 
-		go client.Read(hubInstance.Broadcast, hubInstance.Deregister, done)
+		go client.Read(hubInstance.Broadcast, hubInstance.Deregister, hubInstance.List, hubInstance.DM, done)
+		go client.Write()
 
-			<-done
+		<-done
+		return
 		}
 
 		if exists {
@@ -75,6 +82,7 @@ func handleConnection(conn net.Conn, hubInstance *hub.Hub) {
 	}	
 	
 }
+
 
 func TCPServer(port, maxConnections int, hubInstance *hub.Hub) error{
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))

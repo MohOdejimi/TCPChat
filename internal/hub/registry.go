@@ -46,14 +46,14 @@ func (r *Registry) SetUserName(username string, conn net.Conn) *client.Client{
     return clientStruct
 }
 
-func (r *Registry) List() []string {
+func (r *Registry) ListOfConnectedClients() []*client.Client {
     r.mu.RLock()
     defer r.mu.RUnlock()
 
-    users := make([]string, 0, len(r.client))
+    users := make([]*client.Client, 0, len(r.client))
 
-    for username := range r.client {
-        users = append(users, username)
+    for _, clientInfo := range r.client {
+        users = append(users, clientInfo)
     }
 
     return users
@@ -69,4 +69,13 @@ func (r *Registry) Exists(username string) bool {
     }
     
     return true
+}
+
+func (r *Registry) IsTargetUserOnline(connectedClients []*client.Client, target string) bool {
+	for _, client := range connectedClients {
+		if client.Username == target {
+			return true
+		}
+	}
+	return false
 }
