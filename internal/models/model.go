@@ -14,3 +14,8 @@ type DMMessage struct {
 	Message string 
 	Time time.Time
 }
+
+type Rename struct {
+	Sender string 
+	Newname string 
+}

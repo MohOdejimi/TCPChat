@@ -66,7 +66,7 @@ func handleConnection(conn net.Conn, hubInstance *hub.Hub) {
 
 		done := make(chan struct{})
 
-		go client.Read(hubInstance.Broadcast, hubInstance.Deregister, hubInstance.List, hubInstance.DM, done)
+		go client.Read(hubInstance.Broadcast, hubInstance.Deregister, hubInstance.List, hubInstance.DM, hubInstance.Name, done)
 		go client.Write()
 
 		<-done
@@ -92,6 +92,7 @@ func TCPServer(port, maxConnections int, hubInstance *hub.Hub) error{
 	}
 	defer listener.Close()
 
+	hubInstance.Listener = listener
 
 	for {
 		conn, err := listener.Accept()

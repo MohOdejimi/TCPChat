@@ -79,3 +79,32 @@ func (r *Registry) IsTargetUserOnline(connectedClients []*client.Client, target 
 	}
 	return false
 }
+
+func (r *Registry) Deregister(username string) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+
+    delete(r.client, username)
+}
+
+func (r *Registry) Get(username string) (*client.Client, bool) {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+
+    senderClient, exists := r.client[username]
+
+    if exists {
+        return senderClient, true
+    }
+
+    return nil, false 
+}
+
+func (r *Registry) UpdateUsername(oldName, newName string, existingClient *client.Client) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+
+    delete(r.client, oldName)
+    existingClient.Username = newName
+    r.client[newName] = existingClient
+}

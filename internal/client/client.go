@@ -29,7 +29,7 @@ func NewClient(conn net.Conn, username string) *Client {
 }
 
 
-func (c *Client) Read(broadcast chan models.Message, deregister, list chan string, dm chan models.DMMessage, done chan struct{}) {
+func (c *Client) Read(broadcast chan models.Message, deregister, list chan string, dm chan models.DMMessage, newName chan models.Rename, done chan struct{}) {
 	defer c.Conn.Close()
 	defer close(done)
 	defer close(c.Send)
@@ -57,10 +57,15 @@ func (c *Client) Read(broadcast chan models.Message, deregister, list chan strin
 						Message:  cmd.Body,
 						Time:     time.Now(),
 					}
-				}
+				case commands.Rename: 	
+					newName <- models.Rename{
+						Sender: c.Username,
+						Newname: cmd.Target,
+					}
+			}
 
 			} else {
-				c.Send <- []byte("Invalid command. Please try again with any of the accepted commands. /list, /quit, /rename, /dm <username> <message>\n")
+				c.Send <- []byte("Invalid command. Please try again with any of the accepted commands. /list, /quit, /rename <username>, /dm <username> <message>\n")
 			}
 		} else {
 			broadcast <- models.Message{
